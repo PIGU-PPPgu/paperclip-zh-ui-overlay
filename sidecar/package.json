@@ -1,0 +1,9 @@
+{
+  "name": "paperclip-zh-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "http-proxy": "1.18.1" }
+}
