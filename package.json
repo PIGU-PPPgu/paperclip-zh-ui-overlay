@@ -1,0 +1,12 @@
+{
+  "name": "paperclip-zh-ui-overlay",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "check": "node install.mjs check",
+    "test": "node --test"
+  }
+}
