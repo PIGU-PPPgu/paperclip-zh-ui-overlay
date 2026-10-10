@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   check-and-test:
-    runs-on: paperclip-mac
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
