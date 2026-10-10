@@ -24,13 +24,13 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: 24
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      - name: Install sidecar dependencies
+        run: npm ci --prefix sidecar --omit=dev --no-audit --no-fund
 
-      - name: Check overlay package
-        run: npm run check
+      - name: Check syntax
+        run: node --check overlay.js && node --check install.mjs && node --check sidecar/proxy.mjs
 
       - name: Run tests
         run: npm test
