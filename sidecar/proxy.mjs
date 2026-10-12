@@ -176,13 +176,29 @@ export function createChineseProxy({
   }) };
 }
 
+export async function startChineseProxy({ aliasPort = null, ...options } = {}) {
+  const primary = createChineseProxy(options);
+  await primary.listen();
+  let alias = null;
+  if (aliasPort !== null && Number(aliasPort) !== primary.server.address().port) {
+    alias = createChineseProxy({ ...options, bindPort: Number(aliasPort) });
+    try { await alias.listen(); }
+    catch (error) {
+      await new Promise((resolve) => primary.server.close(resolve));
+      throw error;
+    }
+  }
+  return { primary, alias };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const proxy = createChineseProxy({
+  const endpoints = await startChineseProxy({
     upstreamUrl: process.env.PAPERCLIP_UPSTREAM_URL ?? "http://127.0.0.1:3100",
     assetsDir: process.env.PAPERCLIP_ZH_ASSETS_DIR ?? defaultAssetsDir,
     bindHost: process.env.PAPERCLIP_ZH_BIND_HOST ?? "127.0.0.1",
     bindPort: Number(process.env.PAPERCLIP_ZH_BIND_PORT ?? 3101),
+    aliasPort: process.env.PAPERCLIP_ZH_ALIAS_PORT == null ? null : Number(process.env.PAPERCLIP_ZH_ALIAS_PORT),
   });
-  await proxy.listen();
-  process.stdout.write(`paperclip-zh-sidecar listening on 127.0.0.1:${proxy.server.address().port}\n`);
+  const ports = [endpoints.primary, endpoints.alias].filter(Boolean).map((endpoint) => endpoint.server.address().port);
+  process.stdout.write(`paperclip-zh-sidecar listening on 127.0.0.1:${ports.join(",")}\n`);
 }

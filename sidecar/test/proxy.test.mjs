@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { createChineseProxy } from "../proxy.mjs";
+import { createChineseProxy, startChineseProxy } from "../proxy.mjs";
 
 const assetsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -90,6 +90,29 @@ test("injects Chinese UI without changing API responses or POST bodies", async (
     assert.equal(redirect.headers.get("location"), `${origin}/CMP/issues`);
   } finally {
     await close(proxy.server);
+    await close(upstream);
+  }
+});
+
+test("primary and alias addresses both serve the Chinese entry", async () => {
+  const upstream = http.createServer((request, response) => {
+    response.writeHead(200, { "content-type": request.url === "/api/health" ? "application/json" : "text/html" });
+    response.end(request.url === "/api/health" ? JSON.stringify({ status: "ok", version: "test" }) : "<html><head></head><body>Paperclip</body></html>");
+  });
+  const upstreamPort = await listen(upstream);
+  const endpoints = await startChineseProxy({ upstreamUrl: `http://127.0.0.1:${upstreamPort}`, assetsDir, bindPort: 0, aliasPort: 0 });
+  try {
+    const ports = [endpoints.primary, endpoints.alias].map((endpoint) => endpoint.server.address().port);
+    assert.notEqual(ports[0], ports[1]);
+    for (const port of ports) {
+      const page = await fetch(`http://127.0.0.1:${port}/CMP/issues`);
+      assert.equal((await page.text()).match(/paperclip-zh\/overlay\.js/g)?.length, 1);
+      const health = await fetch(`http://127.0.0.1:${port}/_paperclip_zh/health`);
+      assert.equal((await health.json()).status, "ok");
+    }
+  } finally {
+    await close(endpoints.alias.server);
+    await close(endpoints.primary.server);
     await close(upstream);
   }
 });
