@@ -40,6 +40,7 @@ PAPERCLIP_HOME=/path/to/paperclip-home node install.mjs restore /absolute/backup
 ## 翻译与许可
 
 - `overrides.zh-CN.json`：针对 Paperclip `v2026.916.1` 常用页面校对的词条。
+- 智能体页补充运行状态、运行器配置、心跳策略与模型测试文案；上游新增或改名的文案仍需逐版核对。
 - `vendor/penclip-zh-CN.json`：从 [penclipai/paperclip-cn](https://github.com/penclipai/paperclip-cn/tree/047c4d51f8e53f32c1daca494e69460cf1695095) 复制的静态词库；不运行其代码，许可见 `vendor/LICENSE.penclip`。
 - 入口与其余代码按根目录 `LICENSE` 的 MIT 许可发布。
 
