@@ -13,6 +13,8 @@ node sidecar/proxy.mjs
 
 打开 `http://127.0.0.1:3101`。`http://127.0.0.1:3101/_paperclip_zh/health` 会报告入口和上游状态。入口只绑定 loopback；如需供其他成员访问，应先将 Paperclip 切到需要登录的部署模式，再用受控的 HTTPS 私有入口发布。
 
+若入口位于 Caddy 或 Tailscale Serve 后面，设置 `PAPERCLIP_ZH_PUBLIC_ORIGIN=https://paperclip.example.com`，并让 Paperclip 的公开地址使用同一个 HTTPS origin。sidecar 仍只监听 loopback；此设置固定转发给 Paperclip 的 Host 和协议，以及登录重定向的地址，不接受任意网页请求头作为公开地址。不要把无登录的 `local_trusted` 实例对外开放。
+
 若已有书签指向 `3100`，可将 Paperclip 实例本身改为仅监听 `127.0.0.1:3102`，让中文入口占用原地址，并让 `3101` 同时作为兼容入口：
 
 ```sh

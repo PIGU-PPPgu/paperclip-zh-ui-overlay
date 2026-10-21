@@ -25,6 +25,46 @@ function close(server) {
 test("only loopback origins are accepted", () => {
   assert.throws(() => createChineseProxy({ upstreamUrl: "https://example.com", assetsDir }), /loopback HTTP/);
   assert.throws(() => createChineseProxy({ bindHost: "0.0.0.0", assetsDir }), /loopback host/);
+  assert.throws(() => createChineseProxy({ publicOrigin: "http://example.com", assetsDir }), /HTTPS origin/);
+  assert.throws(() => createChineseProxy({ publicOrigin: "https://example.com/path", assetsDir }), /HTTPS origin/);
+});
+
+test("configured HTTPS origin reaches Paperclip without an HTTP login redirect", async () => {
+  const upstream = http.createServer((request, response) => {
+    if (request.url === "/redirect") {
+      response.writeHead(302, { location: `http://127.0.0.1:${upstream.address().port}/login` });
+      response.end();
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({
+      host: request.headers.host,
+      forwardedHost: request.headers["x-forwarded-host"],
+      forwardedProto: request.headers["x-forwarded-proto"],
+    }));
+  });
+  const upstreamPort = await listen(upstream);
+  const proxy = createChineseProxy({
+    upstreamUrl: `http://127.0.0.1:${upstreamPort}`,
+    assetsDir,
+    bindPort: 0,
+    publicOrigin: "https://paperclip.example.com",
+  });
+  const address = await proxy.listen();
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const response = await fetch(`${origin}/api/echo`);
+    assert.deepEqual(await response.json(), {
+      host: "paperclip.example.com",
+      forwardedHost: "paperclip.example.com",
+      forwardedProto: "https",
+    });
+    const redirect = await fetch(`${origin}/redirect`, { redirect: "manual" });
+    assert.equal(redirect.headers.get("location"), "https://paperclip.example.com/login");
+  } finally {
+    await close(proxy.server);
+    await close(upstream);
+  }
 });
 
 test("injects Chinese UI without changing API responses or POST bodies", async () => {

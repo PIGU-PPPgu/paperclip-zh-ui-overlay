@@ -17,6 +17,16 @@ function isLoopback(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]" || hostname === "::1";
 }
 
+function parsePublicOrigin(value) {
+  if (value == null || value === "") return null;
+  const url = new URL(value);
+  if ((url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback(url.hostname)))
+    || url.pathname !== "/" || url.search || url.hash || url.username || url.password) {
+    throw new Error("Chinese UI public origin must be an HTTPS origin or loopback HTTP origin");
+  }
+  return url;
+}
+
 function copyHeaders(headers, { html = false, upstreamOrigin = null, proxyOrigin = null } = {}) {
   const result = { ...headers };
   for (const key of ["connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"]) {
@@ -39,8 +49,10 @@ export function createChineseProxy({
   assetsDir = defaultAssetsDir,
   bindHost = "127.0.0.1",
   bindPort = 3101,
+  publicOrigin = null,
 } = {}) {
   const upstream = new URL(upstreamUrl);
+  const external = parsePublicOrigin(publicOrigin);
   if (upstream.protocol !== "http:" || !isLoopback(upstream.hostname) || upstream.pathname !== "/") {
     throw new Error("Paperclip upstream must be a loopback HTTP origin");
   }
@@ -56,7 +68,7 @@ export function createChineseProxy({
     .update(Buffer.concat([...assetBytes.values()].map((entry) => entry.bytes)))
     .digest("hex").slice(0, 12);
   const scriptTag = `<script defer src="/paperclip-zh/overlay.js?v=${version}"></script>`;
-  const wsProxy = httpProxy.createProxyServer({ target: upstreamUrl, ws: true, changeOrigin: true });
+  const wsProxy = httpProxy.createProxyServer({ target: upstreamUrl, ws: true, changeOrigin: false });
   wsProxy.on("error", (_error, _request, socket) => {
     if (socket && typeof socket.destroy === "function") socket.destroy();
   });
@@ -101,9 +113,9 @@ export function createChineseProxy({
 
     const headers = {
       ...request.headers,
-      host: upstream.host,
-      "x-forwarded-host": request.headers.host ?? `${bindHost}:${bindPort}`,
-      "x-forwarded-proto": "http",
+      host: external?.host ?? upstream.host,
+      "x-forwarded-host": external?.host ?? request.headers.host ?? `${bindHost}:${bindPort}`,
+      "x-forwarded-proto": external ? external.protocol.slice(0, -1) : "http",
       "accept-encoding": "identity",
     };
     const upstreamRequest = http.request(upstream, {
@@ -115,7 +127,7 @@ export function createChineseProxy({
         && upstreamResponse.statusCode === 200
         && String(upstreamResponse.headers["content-type"] ?? "").toLowerCase().includes("text/html")
         && !upstreamResponse.headers["content-encoding"];
-      const headerOptions = { upstreamOrigin: upstream.origin, proxyOrigin: `http://${request.headers.host}` };
+      const headerOptions = { upstreamOrigin: upstream.origin, proxyOrigin: external?.origin ?? `http://${request.headers.host}` };
       if (!isHtml) {
         response.writeHead(upstreamResponse.statusCode ?? 502, copyHeaders(upstreamResponse.headers, headerOptions));
         upstreamResponse.pipe(response);
@@ -163,8 +175,9 @@ export function createChineseProxy({
     request.pipe(upstreamRequest);
   });
   server.on("upgrade", (request, socket, head) => {
-    request.headers["x-forwarded-host"] = request.headers.host;
-    request.headers["x-forwarded-proto"] = "http";
+    request.headers["x-forwarded-host"] = external?.host ?? request.headers.host;
+    request.headers["x-forwarded-proto"] = external ? external.protocol.slice(0, -1) : "http";
+    request.headers.host = external?.host ?? upstream.host;
     wsProxy.ws(request, socket, head);
   });
   return { server, version, listen: () => new Promise((resolve, reject) => {
@@ -198,6 +211,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     bindHost: process.env.PAPERCLIP_ZH_BIND_HOST ?? "127.0.0.1",
     bindPort: Number(process.env.PAPERCLIP_ZH_BIND_PORT ?? 3101),
     aliasPort: process.env.PAPERCLIP_ZH_ALIAS_PORT == null ? null : Number(process.env.PAPERCLIP_ZH_ALIAS_PORT),
+    publicOrigin: process.env.PAPERCLIP_ZH_PUBLIC_ORIGIN ?? null,
   });
   const ports = [endpoints.primary, endpoints.alias].filter(Boolean).map((endpoint) => endpoint.server.address().port);
   process.stdout.write(`paperclip-zh-sidecar listening on 127.0.0.1:${ports.join(",")}\n`);
